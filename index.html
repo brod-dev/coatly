@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>coatly — room-by-room paint estimator</title>
+<style>
+  :root{
+    --surface:#f6f1ea;
+    --card:#fffdfa;
+    --panel:#efe7dc;
+    --ink:#332e28;
+    --ink-soft:#6b6157;
+    --line:#e2d7c8;
+    --line-strong:#d2c4b1;
+    --primary:#b5623f;
+    --primary-dark:#96492c;
+    --primary-tint:#f3e4da;
+    --accent:#6f7d5a;
+    --accent-tint:#e7ecdc;
+    --warn:#c08a2d;
+    --focus:#2f6b8f;
+    --shadow:0 1px 2px rgba(60,45,30,.05),0 8px 24px rgba(60,45,30,.07);
+    --r-swatch-0:#b5623f; --r-swatch-1:#6f7d5a; --r-swatch-2:#4f7186;
+    --r-swatch-3:#a6813e; --r-swatch-4:#8a5670; --r-swatch-5:#5c7d70;
+    --r-swatch-6:#9a5a4e; --r-swatch-7:#7a6a9c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--surface);
+    color:var(--ink);
+    font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 80px}
+  header.top{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  header.top svg{width:44px;height:44px;flex:none}
+  .brand h1{
+    font:600 30px/1 Georgia,"Iowan Old Style","Times New Roman",serif;
+    letter-spacing:-.4px;margin:0;color:var(--ink);
+  }
+  .brand p{margin:3px 0 0;color:var(--ink-soft);font-size:14.5px}
+  .layout{display:grid;grid-template-columns:1fr 340px;gap:28px;margin-top:30px;align-items:start}
+  @media(max-width:880px){.layout{grid-template-columns:1fr}}
+  h2.sec{
+    font:600 13px/1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--ink-soft);margin:0 0 14px;
+  }
+  .rooms{display:flex;flex-direction:column;gap:16px}
+  .room{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    box-shadow:var(--shadow);overflow:hidden;position:relative;
+  }
+  .room::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--hue,#b5623f)}
+  .room-head{display:flex;align-items:center;gap:10px;padding:14px 16px 10px 20px}
+  .room-head .dot{width:14px;height:14px;border-radius:4px;background:var(--hue);flex:none}
+  .room-head input.name{
+    border:none;background:transparent;font:600 17px/1.2 system-ui,sans-serif;color:var(--ink);
+    flex:1;min-width:0;padding:4px 2px;border-bottom:1.5px solid transparent;
+  }
+  .room-head input.name:focus{outline:none;border-bottom-color:var(--hue)}
+  .room-head .area-badge{
+    font-size:13px;color:var(--ink-soft);background:var(--panel);
+    padding:4px 10px;border-radius:999px;white-space:nowrap;
+  }
+  .room-head button.del{
+    border:none;background:transparent;color:var(--ink-soft);cursor:pointer;
+    font-size:19px;line-height:1;padding:4px 8px;border-radius:8px;
+  }
+  .room-head button.del:hover{background:var(--primary-tint);color:var(--primary-dark)}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:8px 16px 16px 20px}
+  @media(max-width:560px){.grid{grid-template-columns:repeat(2,1fr)}}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field.span2{grid-column:span 2}
+  label{font-size:12.5px;color:var(--ink-soft);font-weight:500}
+  input[type=number],select,input[type=text].txt{
+    width:100%;padding:9px 10px;border:1px solid var(--line-strong);border-radius:9px;
+    background:#fff;color:var(--ink);font:15px/1 system-ui,sans-serif;
+  }
+  input[type=number]:focus,select:focus,input.name:focus,input.txt:focus{
+    outline:2px solid var(--focus);outline-offset:1px;border-color:var(--focus);
+  }
+  .opts{display:flex;flex-wrap:wrap;gap:16px;padding:0 16px 16px 20px;align-items:center}
+  .check{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--ink-soft)}
+  .check input{width:16px;height:16px;accent-color:var(--accent)}
+  .addbtn{
+    margin-top:4px;display:inline-flex;align-items:center;gap:8px;
+    background:var(--accent-tint);color:#3f4a2f;border:1px dashed var(--accent);
+    padding:12px 16px;border-radius:12px;cursor:pointer;font:600 15px/1 system-ui;width:100%;
+    justify-content:center;
+  }
+  .addbtn:hover{background:#dde5cc}
+  .empty{
+    text-align:center;padding:44px 20px;color:var(--ink-soft);
+    border:1px dashed var(--line-strong);border-radius:14px;background:var(--card);
+  }
+  .empty strong{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
+  /* summary */
+  .side{position:sticky;top:24px;display:flex;flex-direction:column;gap:20px}
+  .settings,.summary{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+  .settings{padding:18px}
+  .settings .row{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+  .settings .row:last-child{margin-bottom:0}
+  .seg{display:flex;border:1px solid var(--line-strong);border-radius:9px;overflow:hidden}
+  .seg button{
+    flex:1;border:none;background:#fff;padding:9px 6px;cursor:pointer;font:600 13.5px/1 system-ui;
+    color:var(--ink-soft);
+  }
+  .seg button[aria-pressed=true]{background:var(--primary);color:#fff}
+  .coats{display:flex;gap:8px}
+  .coats button{
+    flex:1;border:1px solid var(--line-strong);background:#fff;border-radius:9px;padding:9px 0;
+    cursor:pointer;font:600 15px/1 system-ui;color:var(--ink-soft);
+  }
+  .coats button[aria-pressed=true]{background:var(--primary-tint);border-color:var(--primary);color:var(--primary-dark)}
+  .summary{padding:18px;background:linear-gradient(180deg,#fffdfa,#fbf5ec)}
+  .summary h3{
+    font:600 13px/1 system-ui;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-soft);margin:0 0 14px;
+  }
+  .big{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+  .big .num{font:700 40px/1 Georgia,serif;color:var(--primary-dark)}
+  .big .unit{font-size:15px;color:var(--ink-soft)}
+  .sub{color:var(--ink-soft);font-size:14px;margin-bottom:16px}
+  .lines{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:9px}
+  .lines .li{display:flex;justify-content:space-between;font-size:14px}
+  .lines .li span:first-child{color:var(--ink-soft)}
+  .lines .li b{font-weight:600}
+  .bars{margin-top:16px;display:flex;flex-direction:column;gap:8px}
+  .bar-row{display:flex;align-items:center;gap:8px;font-size:12.5px}
+  .bar-label{width:78px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar-track{flex:1;height:9px;background:var(--panel);border-radius:999px;overflow:hidden}
+  .bar-fill{height:100%;border-radius:999px}
+  .cost-box{margin-top:14px;background:var(--accent-tint);border-radius:11px;padding:12px 14px}
+  .cost-box .li{display:flex;justify-content:space-between;font-size:14px}
+  .cost-box .total{border-top:1px solid #cdd6ba;margin-top:8px;padding-top:8px;font-weight:700}
+  .foot{margin-top:30px;color:var(--ink-soft);font-size:12.5px;text-align:center}
+  .foot .tip{background:var(--panel);border-radius:10px;padding:12px 16px;display:inline-block;color:var(--ink-soft)}
+  .inline-in{display:flex;align-items:center;gap:8px}
+  .inline-in input{max-width:100%}
+  @media print{.side{position:static}.addbtn,.room-head button.del{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="coatly logo">
+      <rect x="6" y="10" width="26" height="12" rx="2.5" fill="#b5623f"/>
+      <rect x="9" y="13" width="20" height="6" rx="1.5" fill="#e9d9c9"/>
+      <path d="M32 13.5h5a3 3 0 0 1 3 3V22a3 3 0 0 1-3 3h-8" stroke="#b5623f" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+      <rect x="21.4" y="24" width="5.2" height="6" rx="1.4" fill="#3a352f"/>
+      <path d="M22 30h4v7.5a2 2 0 0 1-2 2 2 2 0 0 1-2-2V30Z" fill="#6f7d5a"/>
+    </svg>
+    <div class="brand">
+      <h1>coatly</h1>
+      <p>Estimate paint for every room — measure once, buy the right amount.</p>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main>
+      <h2 class="sec">Rooms</h2>
+      <div class="rooms" id="rooms"></div>
+      <button class="addbtn" id="add" type="button">＋ Add a room</button>
+      <div class="foot">
+        <span class="tip">Doors are counted at <b id="doorNote"></b>, windows at <b id="winNote"></b>. Adjust coverage in Settings to match your paint's label.</span>
+      </div>
+    </main>
+
+    <aside class="side">
+      <div class="settings">
+        <h2 class="sec" style="margin-bottom:14px">Settings</h2>
+        <div class="row">
+          <label>Units</label>
+          <div class="seg" id="units">
+            <button data-u="metric" aria-pressed="true">Metric (m)</button>
+            <button data-u="imperial" aria-pressed="false">Imperial (ft)</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>Coats</label>
+          <div class="coats" id="coats">
+            <button data-c="1" aria-pressed="false">1</button>
+            <button data-c="2" aria-pressed="true">2</button>
+            <button data-c="3" aria-pressed="false">3</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="coverage">Coverage <span id="covUnit">(m² per litre)</span></label>
+          <input type="number" id="coverage" min="1" step="0.5" value="11">
+        </div>
+        <div class="row">
+          <label for="cansize">Can size <span id="canUnit">(litres)</span></label>
+          <input type="number" id="cansize" min="0.1" step="0.1" value="5">
+        </div>
+        <div class="row">
+          <label for="price">Price per can</label>
+          <div class="inline-in">
+            <select id="cur" style="max-width:82px">
+              <option>$</option><option>£</option><option>€</option><option>A$</option><option>C$</option>
+            </select>
+            <input type="number" id="price" min="0" step="0.5" value="34">
+          </div>
+        </div>
+      </div>
+
+      <div class="summary">
+        <h3>Your estimate</h3>
+        <div class="big"><span class="num" id="totPaint">0</span><span class="unit" id="paintUnit">litres</span></div>
+        <div class="sub" id="paintSub">Add a room to get started.</div>
+        <div class="lines">
+          <div class="li"><span>Paintable area</span><b id="totArea">0</b></div>
+          <div class="li"><span>Coats</span><b id="coatOut">2</b></div>
+          <div class="li"><span>Cans to buy</span><b id="cansOut">0</b></div>
+        </div>
+        <div class="bars" id="bars"></div>
+        <div class="cost-box">
+          <div class="li"><span id="costLine">0 cans × $34 each</span></div>
+          <div class="li total"><span>Estimated total</span><b id="costTotal">$0</b></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var HUES=['--r-swatch-0','--r-swatch-1','--r-swatch-2','--r-swatch-3','--r-swatch-4','--r-swatch-5','--r-swatch-6','--r-swatch-7'];
+  var css=getComputedStyle(document.documentElement);
+  function hex(v){return css.getPropertyValue(v).trim();}
+  var state={units:'metric',coats:2,coverage:11,cansize:5,price:34,cur:'$',rooms:[],seq:0};
+  // door/window standard sizes in m^2
+  var DOOR_M2=1.9, WIN_M2=1.5;
+
+  function m2ToDisplay(m2){
+    if(state.units==='imperial') return m2*10.7639;
+    return m2;
+  }
+  function areaUnit(){return state.units==='imperial'?'ft²':'m²';}
+  function lenUnit(){return state.units==='imperial'?'ft':'m';}
+  // convert a length input (in current unit) to meters
+  function toM(v){return state.units==='imperial'? v*0.3048 : v;}
+
+  function newRoom(name){
+    return {id:++state.seq,name:name||('Room '+(state.rooms.length+1)),
+      length:'',width:'',height:state.units==='imperial'?8:2.4,
+      doors:1,windows:1,ceiling:false};
+  }
+
+  function roomAreaM2(r){
+    var L=toM(parseFloat(r.length)||0), W=toM(parseFloat(r.width)||0), H=toM(parseFloat(r.height)||0);
+    var perim=2*(L+W);
+    var walls=perim*H;
+    var ceil=r.ceiling? L*W : 0;
+    var subtract=(parseInt(r.doors)||0)*DOOR_M2 + (parseInt(r.windows)||0)*WIN_M2;
+    var net=walls+ceil-subtract;
+    return net>0?net:0;
+  }
+
+  function render(){
+    var host=document.getElementById('rooms');
+    host.innerHTML='';
+    if(state.rooms.length===0){
+      var e=document.createElement('div');e.className='empty';
+      e.innerHTML='<strong>No rooms yet</strong>Add a room, punch in its dimensions, and coatly figures out how much paint to buy.';
+      host.appendChild(e);
+    }
+    state.rooms.forEach(function(r,i){
+      var hue=hex(HUES[i%HUES.length]);
+      var areaM2=roomAreaM2(r);
+      var el=document.createElement('div');
+      el.className='room';el.style.setProperty('--hue',hue);
+      el.innerHTML=
+        '<div class="room-head">'+
+          '<span class="dot"></span>'+
+          '<input class="name" value="'+esc(r.name)+'" data-f="name" aria-label="Room name">'+
+          '<span class="area-badge">'+fmt(m2ToDisplay(areaM2),1)+' '+areaUnit()+'</span>'+
+          '<button class="del" title="Remove room" aria-label="Remove room">×</button>'+
+        '</div>'+
+        '<div class="grid">'+
+          numField('Length ('+lenUnit()+')','length',r.length)+
+          numField('Width ('+lenUnit()+')','width',r.width)+
+          numField('Wall height ('+lenUnit()+')','height',r.height)+
+          numField('Doors','doors',r.doors)+
+        '</div>'+
+        '<div class="opts">'+
+          '<div class="field" style="max-width:120px"><label>Windows</label><input type="number" min="0" step="1" data-f="windows" value="'+esc(r.windows)+'"></div>'+
+          '<label class="check"><input type="checkbox" data-f="ceiling" '+(r.ceiling?'checked':'')+'> Include ceiling</label>'+
+        '</div>';
+      // wire fields
+      el.querySelectorAll('[data-f]').forEach(function(inp){
+        var f=inp.getAttribute('data-f');
+        var evt=(inp.type==='checkbox')?'change':'input';
+        inp.addEventListener(evt,function(){
+          r[f]= inp.type==='checkbox'? inp.checked : inp.value;
+          if(f==='name'){recompute();return;} // don't re-render on name typing
+          softUpdate();
+        });
+      });
+      el.querySelector('.del').addEventListener('click',function(){
+        state.rooms.splice(i,1);render();recompute();
+      });
+      host.appendChild(el);
+    });
+    recompute();
+  }
+
+  function numField(lbl,f,val){
+    return '<div class="field"><label>'+lbl+'</label><input type="number" min="0" step="0.1" data-f="'+f+'" value="'+esc(val)+'"></div>';
+  }
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function fmt(n,d){d=d==null?0:d;return (Math.round(n*Math.pow(10,d))/Math.pow(10,d)).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});}
+
+  // update area badges + summary without wiping inputs (keeps focus)
+  function softUpdate(){
+    var host=document.getElementById('rooms');
+    var cards=host.querySelectorAll('.room');
+    state.rooms.forEach(function(r,i){
+      if(cards[i]){cards[i].querySelector('.area-badge').textContent=fmt(m2ToDisplay(roomAreaM2(r)),1)+' '+areaUnit();}
+    });
+    recompute();
+  }
+
+  function recompute(){
+    var totM2=0, per=[];
+    state.rooms.forEach(function(r,i){var a=roomAreaM2(r);totM2+=a;per.push({name:r.name,a:a,hue:hex(HUES[i%HUES.length])});});
+    var paintM2=totM2*state.coats;
+    var litres=state.coverage>0? paintM2/state.coverage : 0;
+    // display paint volume
+    var vol=litres, volUnit='litres';
+    if(state.units==='imperial'){vol=litres*0.264172;volUnit='gallons';}
+    var cans=state.cansize>0? Math.ceil(litres/(state.units==='imperial'? state.cansize/0.264172 : state.cansize)) : 0;
+    if(totM2===0)cans=0;
+
+    document.getElementById('totPaint').textContent=fmt(vol, vol<10?1:0);
+    document.getElementById('paintUnit').textContent=volUnit;
+    document.getElementById('paintSub').textContent= state.rooms.length?
+      (state.coats+' coat'+(state.coats>1?'s':'')+' across '+state.rooms.length+' room'+(state.rooms.length>1?'s':'')) :
+      'Add a room to get started.';
+    document.getElementById('totArea').textContent=fmt(m2ToDisplay(totM2),1)+' '+areaUnit();
+    document.getElementById('coatOut').textContent=state.coats;
+    document.getElementById('cansOut').textContent=cans;
+
+    // bars
+    var bars=document.getElementById('bars');bars.innerHTML='';
+    var max=Math.max.apply(null,per.map(function(p){return p.a;}).concat([0.0001]));
+    per.forEach(function(p){
+      var row=document.createElement('div');row.className='bar-row';
+      row.innerHTML='<span class="bar-label" title="'+esc(p.name)+'">'+esc(p.name)+'</span>'+
+        '<span class="bar-track"><span class="bar-fill" style="width:'+(p.a/max*100)+'%;background:'+p.hue+'"></span></span>'+
+        '<span style="width:52px;text-align:right;color:var(--ink-soft)">'+fmt(m2ToDisplay(p.a),0)+'</span>';
+      bars.appendChild(row);
+    });
+
+    // cost
+    var each=state.price, total=cans*state.price, cur=state.cur;
+    document.getElementById('costLine').textContent=cans+' can'+(cans===1?'':'s')+' × '+cur+fmt(each,0)+' each';
+    document.getElementById('costTotal').textContent=cur+fmt(total,total<100?2:0);
+    // notes
+    document.getElementById('doorNote').textContent=fmt(m2ToDisplay(DOOR_M2),1)+' '+areaUnit()+' each';
+    document.getElementById('winNote').textContent=fmt(m2ToDisplay(WIN_M2),1)+' '+areaUnit()+' each';
+  }
+
+  // settings wiring
+  document.getElementById('add').addEventListener('click',function(){state.rooms.push(newRoom());render();});
+  document.getElementById('units').addEventListener('click',function(e){
+    var b=e.target.closest('button');if(!b)return;
+    var u=b.getAttribute('data-u');if(u===state.units)return;
+    // convert existing heights default sensibly on switch
+    state.units=u;
+    document.querySelectorAll('#units button').forEach(function(x){x.setAttribute('aria-pressed',x===b);});
+    document.getElementById('covUnit').textContent=u==='imperial'?'(ft² per litre)':'(m² per litre)';
+    document.getElementById('canUnit').textContent=u==='imperial'?'(gallons)':'(litres)';
+    document.getElementById('cansize').value=u==='imperial'?'1':'5';
+    state.cansize=u==='imperial'?1:5;
+    document.getElementById('coverage').value=u==='imperial'?'118':'11';
+    state.coverage=u==='imperial'?118:11;
+    render();
+  });
+  document.getElementById('coats').addEventListener('click',function(e){
+    var b=e.target.closest('button');if(!b)return;
+    state.coats=parseInt(b.getAttribute('data-c'));
+    document.querySelectorAll('#coats button').forEach(function(x){x.setAttribute('aria-pressed',x===b);});
+    recompute();
+  });
+  function bindNum(id,key,transform){
+    document.getElementById(id).addEventListener('input',function(){
+      var v=parseFloat(this.value);state[key]=isNaN(v)?0:v;recompute();
+    });
+  }
+  bindNum('coverage','coverage');bindNum('cansize','cansize');bindNum('price','price');
+  document.getElementById('cur').addEventListener('change',function(){state.cur=this.value;recompute();});
+
+  // seed with two example rooms so the app never looks empty on first paint
+  state.rooms.push({id:++state.seq,name:'Living room',length:5.2,width:4.1,height:2.5,doors:2,windows:2,ceiling:true});
+  state.rooms.push({id:++state.seq,name:'Bedroom',length:3.6,width:3.2,height:2.5,doors:1,windows:1,ceiling:false});
+  render();
+})();
+</script>
+</body>
+</html>
+                                                                               
